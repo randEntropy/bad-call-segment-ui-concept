@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Caller Segments – Interactive Wireframe</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --line:#e5e7eb; --text:#111827; --muted:#6b7280; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial; background:var(--bg); color:var(--text); }
+  header { background:#111827; color:#fff; padding:16px 20px; }
+  header h1 { margin:0; font-size:18px; }
+  .wrap { max-width:1180px; margin:0 auto; padding:20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; box-shadow:0 1px 2px rgba(0,0,0,.05); margin-bottom:16px; }
+  .card h2 { font-size:16px; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); }
+  .card .body { padding:14px 16px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; }
+  button { appearance:none; border:1px solid var(--line); background:#fff; padding:8px 10px; border-radius:8px; cursor:pointer; }
+  button.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+  button.ghost { background:#f9fafb; }
+  button.link { border:none; background:transparent; color:#2563eb; padding:0; }
+  input, select, textarea { width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; }
+  label { display:block; font-weight:600; margin:8px 0 6px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-weight:600; color:#374151; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .muted { color:var(--muted); }
+  .pill { display:inline-block; border:1px solid var(--line); padding:2px 8px; border-radius:999px; background:#f9fafb; }
+  .rule { display:grid; grid-template-columns:1.3fr 1fr 1.2fr auto; gap:8px; align-items:center; margin-bottom:8px; }
+  .rule .ops { display:flex; gap:6px; }
+  .tags { display:flex; gap:6px; flex-wrap:wrap; }
+  .tag { background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe; padding:2px 8px; border-radius:999px; }
+  .aside { background:#f8fafc; border:1px dashed var(--line); padding:10px; border-radius:8px; font-size:13px; }
+  .divider { height:1px; background:var(--line); margin:12px 0; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Caller Segments</h1>
+</header>
+<div class="wrap">
+  <!-- LIST VIEW -->
+  <section id="listView" class="card">
+    <h2>Segments</h2>
+    <div class="body">
+      <div class="actions" style="justify-content:space-between; margin-bottom:10px;">
+        <div style="display:flex; gap:8px; flex:1; max-width:520px;">
+          <input id="search" placeholder="Search segments or routing values" />
+          <select id="filterRv">
+            <option value="">All routing values</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button class="ghost" id="importGenesysBtn">Import Genesys metadata</button>
+          <button class="primary" id="newBtn">Create new segment</button>
+        </div>
+      </div>
+      <table id="segmentsTable">
+        <thead>
+          <tr>
+            <th>Segment name</th>
+            <th>Description</th>
+            <th>Rules (summary)</th>
+            <th>Routing value</th>
+            <th>Updated</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- EDITOR VIEW -->
+  <section id="editorView" class="card hidden">
+    <h2 id="editorTitle">Create segment</h2>
+    <div class="body">
+      <div class="row">
+        <div>
+          <label for="segName">Segment name</label>
+          <input id="segName" placeholder="e.g., High-Intent West Coast Shopper" />
+        </div>
+        <div>
+          <label for="segDesc">Description</label>
+          <input id="segDesc" placeholder="Optional" />
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>Attribute rules</h3>
+      <div id="rules"></div>
+      <div class="actions" style="margin:8px 0 12px;">
+        <button id="addAnd" class="ghost">+ AND condition</button>
+        <button id="addOr" class="ghost">+ OR group</button>
+      </div>
+      <div class="aside">Rules are evaluated left to right. Use AND to narrow and OR to create alternate groups.</div>
+
+      <div class="divider"></div>
+
+      <h3>Routing mapping</h3>
+      <div class="row">
+        <div>
+          <label for="routingType">Routing type</label>
+          <select id="routingType">
+            <option value="queue">Queue</option>
+            <option value="skill">Skill</option>
+            <option value="campaign">Campaign</option>
+            <option value="tag">Segment tag only</option>
+          </select>
+        </div>
+        <div>
+          <label for="routingTarget">Routing target</label>
+          <select id="routingTarget"></select>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>Preview</h3>
+      <div id="preview" class="aside">Live preview will appear here.</div>
+
+      <div class="actions" style="margin-top:14px;">
+        <button class="primary" id="saveBtn">Save segment</button>
+        <button id="cancelBtn">Cancel</button>
+        <button id="dupBtn" class="ghost">Duplicate</button>
+        <button id="delBtn" class="ghost">Delete</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  // Mock Genesys metadata and pre-call attributes
+  const genesys = {
+    queues:["Sales Queue","Support Queue","Retention High","Spanish Support"],
+    skills:["Sales","Technical","Billing","Spanish"],
+    campaigns:["Holiday Promo","Upgrade Outreach"]
+  };
+  const attributes = [
+    {key:"landing_page", label:"Landing Page", ops:["equals","contains","starts with","regex"]},
+    {key:"language", label:"Language", ops:["equals","not equals"]},
+    {key:"cart_value", label:"Cart Value", ops:[">=","<=",">","<"]},
+    {key:"marketing_source", label:"Marketing Source", ops:["equals","contains"]},
+    {key:"repeat_caller", label:"Repeat Caller", ops:["is","is not"]}
+  ];
+
+  // In-memory store
+  let segments = [
+    {
+      id: crypto.randomUUID(),
+      name:"High-Intent West Coast Shopper",
+      desc:"Banner ad + CA + Cart > $100",
+      rules:[{attr:"marketing_source", op:"equals", val:"ABC Banner"}, {attr:"landing_page", op:"contains", val:"/buy"}, {attr:"cart_value", op:">", val:"100"}],
+      routing:{type:"queue", target:"Sales Queue"},
+      updated: new Date().toISOString().slice(0,10)
+    },
+    {
+      id: crypto.randomUUID(),
+      name:"Spanish Support",
+      desc:"Language = Spanish",
+      rules:[{attr:"language", op:"equals", val:"Spanish"}],
+      routing:{type:"queue", target:"Spanish Support"},
+      updated: new Date(Date.now()-86400000*3).toISOString().slice(0,10)
+    }
+  ];
+
+  // DOM refs
+  const listView = document.getElementById('listView');
+  const editorView = document.getElementById('editorView');
+  const segmentsTableBody = document.querySelector('#segmentsTable tbody');
+  const filterRv = document.getElementById('filterRv');
+  const search = document.getElementById('search');
+  const newBtn = document.getElementById('newBtn');
+  const importGenesysBtn = document.getElementById('importGenesysBtn');
+
+  const editorTitle = document.getElementById('editorTitle');
+  const segName = document.getElementById('segName');
+  const segDesc = document.getElementById('segDesc');
+  const rulesEl = document.getElementById('rules');
+  const addAnd = document.getElementById('addAnd');
+  const addOr = document.getElementById('addOr');
+  const routingType = document.getElementById('routingType');
+  const routingTarget = document.getElementById('routingTarget');
+  const preview = document.getElementById('preview');
+  const saveBtn = document.getElementById('saveBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const dupBtn = document.getElementById('dupBtn');
+  const delBtn = document.getElementById('delBtn');
+
+  let editing = null;
+
+  function renderList(){
+    segmentsTableBody.innerHTML = '';
+    const term = search.value.toLowerCase();
+    const rvFilter = filterRv.value;
+    segments
+      .filter(s => !term || (s.name.toLowerCase().includes(term) || (s.desc||'').toLowerCase().includes(term)))
+      .filter(s => !rvFilter || s.routing.target === rvFilter)
+      .forEach(s => {
+        const tr = document.createElement('tr');
+        const rulesSummary = s.rules.map(r => {
+          const a = attributes.find(x=>x.key===r.attr); return `${a?a.label:r.attr} ${r.op} ${r.val}`;
+        }).join(' · ');
+        tr.innerHTML = `
+          <td>${s.name}</td>
+          <td class="muted">${s.desc||''}</td>
+          <td class="muted">${rulesSummary}</td>
+          <td><span class="pill">${s.routing.type}: ${s.routing.target}</span></td>
+          <td class="muted">${s.updated}</td>
+          <td>
+            <button class="link" data-action="edit" data-id="${s.id}">Edit</button>
+            · <button class="link" data-action="duplicate" data-id="${s.id}">Duplicate</button>
+            · <button class="link" data-action="delete" data-id="${s.id}">Delete</button>
+          </td>`;
+        segmentsTableBody.appendChild(tr);
+      });
+
+    // populate filter options
+    const uniqueTargets = Array.from(new Set(segments.map(s=>s.routing.target)));
+    filterRv.innerHTML = `<option value="">All routing values</option>` + uniqueTargets.map(t=>`<option>${t}</option>`).join('');
+  }
+
+  function showEditor(seg){
+    editing = seg ? { ...seg, rules: seg.rules.map(r=>({...r})), routing: {...seg.routing} } : {
+      id: crypto.randomUUID(), name:'', desc:'', rules:[], routing:{type:'queue', target: genesys.queues[0]}, updated:''
+    };
+    editorTitle.textContent = seg ? 'Edit segment' : 'Create segment';
+    segName.value = editing.name; segDesc.value = editing.desc;
+    routingType.value = editing.routing.type; populateTargets(); routingTarget.value = editing.routing.target;
+    rulesEl.innerHTML = '';
+    if(editing.rules.length===0) addRule(); else editing.rules.forEach(addRuleRow);
+    updatePreview();
+    listView.classList.add('hidden'); editorView.classList.remove('hidden');
+  }
+
+  function addRule(){ addRuleRow({attr: attributes[0].key, op: attributes[0].ops[0], val:''}); }
+
+  function addRuleRow(rule){
+    editing.rules.push(rule);
+    const idx = editing.rules.length - 1;
+    const row = document.createElement('div');
+    row.className = 'rule';
+
+    const attrSel = document.createElement('select');
+    attributes.forEach(a=>{ const o=document.createElement('option'); o.value=a.key; o.textContent=a.label; attrSel.appendChild(o); });
+    attrSel.value = rule.attr;
+    attrSel.onchange = () => { rule.attr = attrSel.value; opSel.innerHTML=''; attributes.find(a=>a.key===rule.attr).ops.forEach(op=>{ const o=document.createElement('option'); o.textContent=op; opSel.appendChild(o); }); rule.op = opSel.value; updatePreview(); };
+
+    const opSel = document.createElement('select');
+    (attributes.find(a=>a.key===rule.attr) || attributes[0]).ops.forEach(op=>{ const o=document.createElement('option'); o.textContent=op; opSel.appendChild(o); });
+    opSel.value = rule.op; opSel.onchange = () => { rule.op = opSel.value; updatePreview(); };
+
+    const val = document.createElement('input'); val.placeholder='Value'; val.value = rule.val; val.oninput = () => { rule.val = val.value; updatePreview(); };
+
+    const ops = document.createElement('div'); ops.className='ops';
+    const del = document.createElement('button'); del.textContent='Remove'; del.onclick = () => { editing.rules.splice(idx,1); row.remove(); updatePreview(); };
+    ops.appendChild(del);
+
+    row.appendChild(attrSel); row.appendChild(opSel); row.appendChild(val); row.appendChild(ops);
+    rulesEl.appendChild(row);
+  }
+
+  function populateTargets(){
+    const map = { queue: genesys.queues, skill: genesys.skills, campaign: genesys.campaigns, tag:["Segment A","Segment B","Segment C"] };
+    routingTarget.innerHTML = (map[routingType.value]||[]).map(x=>`<option>${x}</option>`).join('');
+  }
+
+  function updatePreview(){
+    const rulesText = editing.rules.map(r=>{
+      const a = attributes.find(x=>x.key===r.attr); return `${a?a.label:r.attr} ${r.op} "${r.val}"`;
+    }).join(' AND ');
+    const rv = `${editing.routing.type}: ${editing.routing.target}`;
+    preview.textContent = rulesText ? `If ${rulesText} → route via ${rv}.` : `Define at least one rule to generate a segment, then choose a routing value.`;
+  }
+
+  function save(){
+    editing.name = segName.value.trim() || 'Untitled Segment';
+    editing.desc = segDesc.value.trim();
+    editing.routing.type = routingType.value;
+    editing.routing.target = routingTarget.value;
+    editing.updated = new Date().toISOString().slice(0,10);
+    const existing = segments.findIndex(s=>s.id===editing.id);
+    if(existing>-1) segments[existing] = editing; else segments.unshift(editing);
+    showList();
+  }
+
+  function showList(){
+    editorView.classList.add('hidden'); listView.classList.remove('hidden'); renderList();
+  }
+
+  // Events
+  newBtn.onclick = () => showEditor(null);
+  importGenesysBtn.onclick = () => { alert('Mock: fetched queues/skills/campaigns from Genesys.'); };
+  search.oninput = renderList; filterRv.onchange = renderList;
+  addAnd.onclick = () => addRule();
+  addOr.onclick = () => { // simple demo: add another rule group just by adding a rule; grouping visuals omitted in wireframe
+    addRule();
+  };
+  routingType.onchange = () => { populateTargets(); updatePreview(); };
+  routingTarget.onchange = updatePreview;
+  saveBtn.onclick = save; cancelBtn.onclick = showList;
+  dupBtn.onclick = () => { if(!editing) return; const copy = JSON.parse(JSON.stringify(editing)); copy.id = crypto.randomUUID(); copy.name += ' (Copy)'; copy.updated = new Date().toISOString().slice(0,10); segments.unshift(copy); showList(); };
+  delBtn.onclick = () => { if(!editing) return; if(confirm('Delete this segment?')) { segments = segments.filter(s=>s.id!==editing.id); showList(); } };
+  segmentsTableBody.onclick = (e)=>{
+    const btn = e.target.closest('button'); if(!btn) return; const id = btn.dataset.id; const seg = segments.find(s=>s.id===id);
+    if(btn.dataset.action==='edit') showEditor(seg);
+    if(btn.dataset.action==='duplicate'){ const copy = JSON.parse(JSON.stringify(seg)); copy.id = crypto.randomUUID(); copy.name += ' (Copy)'; copy.updated = new Date().toISOString().slice(0,10); segments.unshift(copy); renderList(); }
+    if(btn.dataset.action==='delete'){ if(confirm('Delete this segment?')) { segments = segments.filter(s=>s.id!==id); renderList(); } }
+  };
+
+  // init
+  renderList(); populateTargets();
+})();
+</script>
+</body>
+</html>
